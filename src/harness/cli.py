@@ -7,19 +7,22 @@ from .agent import AgentLoop
 from .config import load_settings
 from .data_tools import build_data_tools
 from .dataset import Dataset
+from .eval_tools import build_eval_tools
 from .provider import OpenAICompatProvider
 from .tools import ToolRegistry
 
-_BANNER = "auto-harness 数据集确定 Agent（输入需求，/exit 退出，/reset 清空会话）"
+_BANNER = "auto-harness Agent（数据集确定 + 自动化评估；输入需求，/exit 退出，/reset 清空会话）"
 
 
 async def _chat() -> None:
     settings = load_settings()
+    provider = OpenAICompatProvider(settings.base_url, settings.api_key, settings.model)
     ds = Dataset(settings.csv_path)
     registry = ToolRegistry()
     for t in build_data_tools(ds, settings.output_dir):
         registry.register(t)
-    provider = OpenAICompatProvider(settings.base_url, settings.api_key, settings.model)
+    for t in build_eval_tools(provider):
+        registry.register(t)
     loop = AgentLoop(provider, registry, max_iterations=settings.max_iterations)
     print(_BANNER)
     try:
