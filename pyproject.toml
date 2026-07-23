@@ -24,6 +24,15 @@ harness-web = "harness.web:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[project.entry-points."nanobot.tools"]
+dataset_stats = "harness_nanobot_tools:DatasetStatsTool"
+list_top_categories = "harness_nanobot_tools:ListTopCategoriesTool"
+list_sub_intents = "harness_nanobot_tools:ListSubIntentsTool"
+filter_queries = "harness_nanobot_tools:FilterQueriesTool"
+sample_queries = "harness_nanobot_tools:SampleQueriesTool"
+get_cluster = "harness_nanobot_tools:GetClusterTool"
+evaluate_response = "harness_nanobot_tools:EvaluateResponseTool"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -27,7 +27,7 @@ def load_settings() -> Settings:
         raise RuntimeError("未找到 LLM_API_KEY，请在 .env 或环境变量中设置。")
     return Settings(
         base_url=os.environ.get("LLM_BASE_URL", "http://1239mxgn96959.vicp.fun:4009"),
-        model=os.environ.get("LLM_MODEL", "glm-5.2"),
+        model=os.environ.get("LLM_MODEL", "deepseek-v4-pro"),
         api_key=api_key,
         csv_path=Path(os.environ.get("HARNESS_CSV", str(_ROOT / "data" / "现网数据.csv"))),
         output_dir=Path(os.environ.get("HARNESS_OUTPUT_DIR", str(_ROOT / "data" / "output"))),
