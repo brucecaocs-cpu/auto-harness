@@ -20,6 +20,7 @@ web = ["fastapi>=0.110", "uvicorn>=0.29"]
 [project.scripts]
 harness = "harness.cli:main"
 harness-web = "harness.web:main"
+harness-data = "harness.data_viewer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
