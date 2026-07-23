@@ -15,9 +15,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+web = ["fastapi>=0.110", "uvicorn>=0.29"]
 
 [project.scripts]
 harness = "harness.cli:main"
+harness-web = "harness.web:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
