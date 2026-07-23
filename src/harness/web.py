@@ -119,7 +119,7 @@ def create_app() -> FastAPI:
     provider = OpenAICompatProvider(settings.base_url, settings.api_key, settings.model)
     ds = Dataset(settings.csv_path)
     registry = ToolRegistry()
-    for t in build_data_tools(ds, settings.output_dir):
+    for t in build_data_tools(ds, settings.output_dir, provider):
         registry.register(t)
     for t in build_eval_tools(provider):
         registry.register(t)

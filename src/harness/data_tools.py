@@ -114,7 +114,48 @@ class _GetCluster(Tool):
                            "preview": rows[:_PREVIEW]}, ensure_ascii=False)
 
 
-def build_data_tools(ds: Dataset, output_dir: str | Path) -> list[Tool]:
+class _FindRelevantCategories(Tool):
+    name = "find_relevant_categories"
+    description = "根据模糊话题描述，从已知一级/二级主题中语义匹配最相关的类别。输入话题，返回匹配的 categories 和 sub_intents 列表。"
+    parameters = {"type": "object", "properties": {
+        "topic": {"type": "string", "description": "模糊话题描述，如「出行」「健康养生」「影音娱乐」"}},
+        "required": ["topic"]}
+
+    def __init__(self, ds: Dataset, provider):
+        self.ds = ds
+        self.provider = provider
+
+    async def execute(self, topic: str) -> str:
+        cats = self.ds.top_categories(99)
+        cat_names = [c["top_category"] for c in cats]
+        intents = [i["sub_intent"] for i in self.ds.sub_intents()]
+        prompt = (
+            "你是主题匹配器。根据用户的话题描述，从下面列出的已知类别中找出语义最相关的一级和二级主题。\n\n"
+            f"【一级主题（{len(cat_names)} 个）】\n" + "、".join(cat_names) + "\n\n"
+            f"【二级主题（{len(intents)} 个）】\n" + "、".join(intents) + "\n\n"
+            f"用户话题：{topic}\n\n"
+            "请只输出 JSON：{\"categories\": [\"匹配的\", \"一级主题\"], \"sub_intents\": [\"匹配的\", \"二级主题\"]}，不要其他文本。"
+        )
+        resp = await self.provider.chat([{"role": "user", "content": prompt}], max_tokens=1024)
+        data = {}
+        try:
+            data = json.loads(resp.content) if isinstance(resp.content, str) else {}
+        except json.JSONDecodeError:
+            import re as _re
+            m = _re.search(r"\{.*\}", resp.content, _re.DOTALL)
+            if m:
+                try:
+                    data = json.loads(m.group())
+                except json.JSONDecodeError:
+                    pass
+        return json.dumps(data, ensure_ascii=False) if data else json.dumps(
+            {"categories": [], "sub_intents": [], "error": resp.content[:200]}, ensure_ascii=False)
+
+
+def build_data_tools(ds: Dataset, output_dir: str | Path, provider=None) -> list[Tool]:
     out = Path(output_dir)
-    return [_DatasetStats(ds), _ListTopCategories(ds), _ListSubIntents(ds),
-            _FilterQueries(ds, out), _SampleQueries(ds, out), _GetCluster(ds)]
+    tools: list[Tool] = [_DatasetStats(ds), _ListTopCategories(ds), _ListSubIntents(ds),
+                         _FilterQueries(ds, out), _SampleQueries(ds, out), _GetCluster(ds)]
+    if provider is not None:
+        tools.append(_FindRelevantCategories(ds, provider))
+    return tools

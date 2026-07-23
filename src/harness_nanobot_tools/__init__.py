@@ -28,7 +28,7 @@ def _setup():
     ds = Dataset(settings.csv_path)
     provider = OpenAICompatProvider(settings.base_url, settings.api_key, settings.model)
     registry = ToolRegistry()
-    for t in build_data_tools(ds, settings.output_dir):
+    for t in build_data_tools(ds, settings.output_dir, provider):
         registry.register(t)
     for t in build_eval_tools(provider):
         registry.register(t)
@@ -87,3 +87,6 @@ class GetClusterTool(_HarnessAdapter):
 
 class EvaluateResponseTool(_HarnessAdapter):
     _hn = "evaluate_response"
+
+class FindRelevantCategoriesTool(_HarnessAdapter):
+    _hn = "find_relevant_categories"
