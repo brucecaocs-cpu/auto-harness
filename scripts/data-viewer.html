@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>原始数据查询 · auto-harness</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#f5f5f5;display:flex;flex-direction:column;height:100vh}
+#header{background:#3b2d6e;color:#fff;padding:10px 20px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+#header b{font-size:16px}
+#header a{color:rgba(255,255,255,0.7);font-size:13px;text-decoration:none}
+#stats-bar{display:flex;gap:12px;padding:10px 14px;background:#fff;border-bottom:1px solid #e0e0e0;flex-wrap:wrap}
+.stat-card{flex:1;min-width:110px;text-align:center;padding:8px 6px;border-radius:8px;background:#f8f5ff;border:1px solid #e8e0f4}
+.stat-card .val{font-size:20px;font-weight:700;color:#5b3cc4}
+.stat-card .lbl{font-size:11px;color:#888;margin-top:2px}
+.stat-card.noise .val{color:#d9534f}
+#charts{display:flex;gap:12px;padding:10px 14px;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e0e0e0}
+#charts>div{flex:1;min-width:320px}
+#charts canvas{max-height:260px}
+#charts h3{font-size:13px;color:#555;margin-bottom:6px}
+#filters{background:#fafafa;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid #ddd;font-size:13px}
+#filters input{padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;outline:none;width:130px}
+#filters input:focus{border-color:#5b3cc4}
+#filters label{color:#555;margin-right:2px;font-size:12px}
+#filters button{padding:6px 14px;background:#5b3cc4;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+#table-wrap{flex:1;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;background:#444;color:#fff;padding:8px 6px;text-align:left;z-index:1}
+tbody td{padding:6px;border-bottom:1px solid #eee;max-width:400px;word-break:break-all}
+tbody tr:hover{background:#ede4f7}
+#pager{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff;border-top:1px solid #ddd;font-size:13px}
+#pager button{padding:6px 12px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff;font-size:12px}
+#pager button:disabled{opacity:.4}
+#charts.collapsed{display:none}
+.toggle-charts{cursor:pointer;font-size:11px;color:#5b3cc4;margin-left:8px;user-select:none}
+</style></head><body>
+<div id="header"><b>📋 原始数据查询</b><div><a href="/">⬅ auto-harness 主界面</a></div></div>
+<div id="stats-bar">
+  <div class="stat-card"><div class="val" id="st-total">-</div><div class="lbl">总行数</div></div>
+  <div class="stat-card"><div class="val" id="st-cat">-</div><div class="lbl">一级主题</div></div>
+  <div class="stat-card"><div class="val" id="st-int">-</div><div class="lbl">二级主题</div></div>
+  <div class="stat-card"><div class="val" id="st-cluster">-</div><div class="lbl">簇数</div></div>
+  <div class="stat-card noise"><div class="val" id="st-noise">-</div><div class="lbl">噪声占比 <span class="toggle-charts" onclick="toggleCharts()">📊 图表</span></div></div>
+</div>
+<div id="charts" class="collapsed">
+  <div><h3>📊 一级主题分布（Top 15）</h3><canvas id="chart-cat"></canvas></div>
+  <div><h3>🍩 噪声 vs 有效数据</h3><canvas id="chart-noise"></canvas></div>
+</div>
+<div id="filters">
+  <label>cluster_id</label><input id="f-cluster" placeholder="如 294">
+  <label>top_category</label><input id="f-category" placeholder="如 闹钟">
+  <label>sub_intent</label><input id="f-intent" placeholder="如 设置闹钟">
+  <label>query_text</label><input id="f-keyword" placeholder="关键词" style="width:180px">
+  <button onclick="search()">🔍 筛选</button><button onclick="resetFilters()" style="background:#888">重置</button>
+</div>
+<div id="table-wrap"><table>
+<thead><tr><th style="width:70px">cluster_id</th><th style="width:80px">cluster_size</th><th style="width:120px">top_category</th><th style="width:120px">sub_intent</th><th>query_text</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="5">加载中...</td></tr></tbody></table></div>
+<div id="pager">
+  <button onclick="goPage(0)" id="b-first">⏮ 首页</button>
+  <button onclick="goPage(cur-1)" id="b-prev">◀ 上页</button>
+  <span>第 <b id="p-cur">1</b> / <b id="p-total">1</b> 页</span>
+  <button onclick="goPage(cur+1)" id="b-next">下页 ▶</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+var API='http://127.0.0.1:8766',cur=0,total=0,chartCat=null,chartNoise=null;
+function esc(v){return v==null?'':String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmt(n){return n.toLocaleString()}
+function load(){
+  var p={offset:cur*50,limit:50,_t:Date.now()};
+  var keys=['cluster_id','top_category','sub_intent','keyword'];
+  var ids=['f-cluster','f-category','f-intent','f-keyword'];
+  for(var i=0;i<4;i++){var v=document.getElementById(ids[i]).value.trim();if(v)p[keys[i]]=v}
+  var qs=Object.keys(p).map(function(k){return encodeURIComponent(k)+'='+encodeURIComponent(p[k])}).join('&');
+  fetch(API+'/api/data/rows?'+qs).then(function(r){return r.json()}).then(function(d){
+    total=Math.ceil(d.total/50)||1;
+    document.getElementById('p-cur').textContent=cur+1;document.getElementById('p-total').textContent=total;
+    document.getElementById('b-prev').disabled=cur<=0;document.getElementById('b-next').disabled=cur>=total-1;
+    document.getElementById('tbody').innerHTML=d.rows.map(function(r){return'<tr><td>'+esc(r.cluster_id)+'</td><td>'+esc(r.cluster_size)+'</td><td>'+esc(r.top_category)+'</td><td>'+esc(r.sub_intent)+'</td><td>'+esc(r.query_text)+'</td></tr>'}).join('');
+  });
+}
+function loadStats(){
+  fetch(API+'/api/data/stats').then(function(r){return r.json()}).then(function(d){
+    document.getElementById('st-total').textContent=fmt(d.total_rows);
+    document.getElementById('st-cat').textContent=d.n_categories;
+    document.getElementById('st-int').textContent=d.n_intents;
+    document.getElementById('st-cluster').textContent=d.n_clusters;
+  });
+  fetch(API+'/api/data/noise-ratio').then(function(r){return r.json()}).then(function(d){
+    document.getElementById('st-noise').textContent=d.noise_pct+'%';
+  });
+}
+function loadCharts(){
+  fetch(API+'/api/data/categories').then(function(r){return r.json()}).then(function(cats){
+    var top15=cats.slice(0,15);
+    var ctx=document.getElementById('chart-cat').getContext('2d');
+    if(chartCat) chartCat.destroy();
+    chartCat=new Chart(ctx,{type:'bar',data:{labels:top15.map(function(c){return c.category}),datasets:[{label:'行数',data:top15.map(function(c){return c.rows}),backgroundColor:'#5b3cc4',borderRadius:4}]},options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:function(v){return v>=1000?(v/1000)+'k':v}}}}}});
+  });
+  fetch(API+'/api/data/noise-ratio').then(function(r){return r.json()}).then(function(d){
+    var ctx2=document.getElementById('chart-noise').getContext('2d');
+    if(chartNoise) chartNoise.destroy();
+    var valid=d.total_rows-d.noise_rows;
+    chartNoise=new Chart(ctx2,{type:'doughnut',data:{labels:['噪声 ('+d.noise_pct+'%)','有效数据'],datasets:[{data:[d.noise_rows,valid],backgroundColor:['#d9534f','#5b3cc4'],borderWidth:0}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
+  });
+}
+function toggleCharts(){
+  var el=document.getElementById('charts');
+  el.classList.toggle('collapsed');
+  if(!el.classList.contains('collapsed')) loadCharts();
+}
+function search(){cur=0;load()}
+function resetFilters(){for(var i=0;i<4;i++)document.getElementById(['f-cluster','f-category','f-intent','f-keyword'][i]).value='';cur=0;load()}
+function goPage(n){if(n>=0&&n<total){cur=n;load()}}
+load();loadStats();
+</script></body></html>
